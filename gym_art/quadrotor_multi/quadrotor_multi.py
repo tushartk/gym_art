@@ -60,7 +60,7 @@ class QuadrotorEnvMulti(gym.Env):
             self.envs.append(e)
 
         self.resample_goals = resample_goals
-
+        self.num_agents_to_show = self.num_agents
         self.scene = None
 
         self.action_space = self.envs[0].action_space
@@ -261,8 +261,7 @@ class QuadrotorEnvMulti(gym.Env):
 
             observation = e.reset()
             obs.append(observation)
-
-        # extend obs to see neighbors
+        self.num_agents_to_show = self.scene.num_agents
         if self.swarm_obs and self.num_agents > 1:
             if self.num_use_neighbor_obs == (self.num_agents-1):
                 obs_ext = self.extend_obs_space(obs)
@@ -277,7 +276,12 @@ class QuadrotorEnvMulti(gym.Env):
         quads_vel = np.array([e.dynamics.vel for e in self.envs])
         obs = self.obstacles.reset(obs=obs, quads_pos=quads_pos, quads_vel=quads_vel, set_obstacles=self.set_obstacles)
         self.all_collisions = {val: [0.0 for _ in range(len(self.envs))] for val in ['drone', 'ground', 'obstacle']}
-        self.scene.reset(tuple(e.goal for e in self.envs), self.all_dynamics(), self.obstacles, self.all_collisions)
+
+        envs_to_show = copy.deepcopy(self.envs)
+        envs_to_show = envs_to_show[:self.num_agents_to_show]
+        goals = tuple(e.goal for e in envs_to_show)
+        dynamics = tuple(e.dynamics for e in envs_to_show)
+        self.scene.reset(goals, dynamics, self.obstacles, self.all_collisions)
 
         self.collisions_per_episode = self.collisions_after_settle = 0
         return obs
@@ -338,9 +342,11 @@ class QuadrotorEnvMulti(gym.Env):
         # Applying random forces for all collisions between drones and obstacles
         if self.apply_collision_force:
             for val in self.curr_drone_collisions:
-                perform_collision_between_drones(self.envs[val[0]].dynamics, self.envs[val[1]].dynamics)
+                if (val[0] <= (self.num_agents_to_show-1)) and (val[1] <= (self.num_agents_to_show-1)):
+                    perform_collision_between_drones(self.envs[val[0]].dynamics, self.envs[val[1]].dynamics)
             for val in np.argwhere(col_obst_quad > 0.0):
-                perform_collision_with_obstacle(self.obstacles.obstacles[val[0]], self.envs[val[1]].dynamics)
+                if val[1] <= (self.num_agents_to_show-1):
+                    perform_collision_with_obstacle(self.obstacles.obstacles[val[0]], self.envs[val[1]].dynamics)
 
         # compute clipped 1/x^2 cost for distance b/w drones
         dists = spatial.distance_matrix(x=self.pos, y=self.pos)
@@ -439,9 +445,13 @@ class QuadrotorEnvMulti(gym.Env):
         realtime_control_period = 1 / self.envs[0].control_freq
 
         render_start = time.time()
-        goals = tuple(e.goal for e in self.envs)
-        self.scene.render_chase(all_dynamics=self.all_dynamics(), goals=goals, collisions=self.all_collisions,
+        envs_to_show = copy.deepcopy(self.envs)
+        envs_to_show = envs_to_show[:self.num_agents_to_show]
+        goals = tuple(e.goal for e in envs_to_show)
+        dynamics = tuple(e.dynamics for e in envs_to_show)
+        self.scene.render_chase(all_dynamics=dynamics, goals=goals, collisions=self.all_collisions,
                                 mode=mode, obstacles=self.obstacles)
+        self.num_agents_to_show = self.scene.num_agents_to_show
         render_time = time.time() - render_start
 
         desired_time_between_frames = realtime_control_period * self.frames_since_last_render / self.render_speed

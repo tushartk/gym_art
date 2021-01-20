@@ -85,6 +85,7 @@ class Quadrotor3DSceneMulti:
         self.goals = None
         self.dynamics = None
         self.num_agents = num_agents
+        self.num_agents_to_show = self.num_agents
         self.camera_drone_index = 0
         self.camera_rot_step_size = np.pi / 18
         self.camera_zoom_step_size = 0.1
@@ -245,6 +246,10 @@ class Quadrotor3DSceneMulti:
                         (collisions['ground'][i] > 0.0) * 1.0, 0.4))
                 else:
                     self.collision_transforms[i].set_transform_and_color(matrix, (0, 0, 0, 0.0))
+            for i in range(len(all_dynamics), len(self.quad_transforms)):
+                self.quad_transforms[i].set_transform_nocollide(np.eye(4))
+                self.shadow_transforms[i].set_transform_nocollide(np.eye(4))
+                self.collision_transforms[i].set_transform_and_color(matrix, (0, 0, 0, 0.0))
 
     def render_chase(self, all_dynamics, goals, collisions, mode='human', obstacles=None):
         if mode == 'human':
@@ -321,5 +326,14 @@ class Quadrotor3DSceneMulti:
                 print('Current zoom step size for camera is the maximum!')
             else:
                 self.camera_zoom_step_size += 0.1
-
+        elif symbol == key.H:
+            self.quads_mode = 'dynamic_goal'
+        elif symbol == key._4:
+            pass
+        elif symbol == key.NUM_ADD:
+            self.num_agents_to_show += 1
+            print('In add')
+        elif symbol == key.NUM_SUBTRACT:
+            self.num_agents_to_show -= 1
+            print('In subtract')
 
