@@ -134,7 +134,7 @@ class Quadrotor3DSceneMulti:
             )
 
             self.vec_arrow_transforms.append(
-                r3d.transform_and_color(np.eye(4), (1, 1, 1), r3d.arrow(0.01, 0.12, 32))
+                r3d.transform_and_color(np.eye(4), (1, 1, 1), r3d.arrow(0.002, 0.12, 32))
             )
 
         # TODO make floor size or walls to indicate world_box
@@ -271,7 +271,8 @@ class Quadrotor3DSceneMulti:
 
                     vector_mag = np.linalg.norm(avg_of_vecs) / 5
 
-                    s = np.diag(list(abs(np.diag(vector_dir) * vector_mag)) + [1.0])
+                    s = np.diag(list(abs(np.diag(vector_dir))) + [1.0])
+
 
                     # Update directions with magnitude only in the z direction as we need only the length to change
                     vector_dir[2][2] = vector_dir[2][2] * vector_mag
