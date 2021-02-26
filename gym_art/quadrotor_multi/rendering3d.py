@@ -323,9 +323,24 @@ TEX_NOISE_GAUSSIAN = 2
 TEX_NOISE_PERLIN = 3
 TEX_OILY = 4
 TEX_VORONOI = 5
+TEX_TRANSP = 6
 
 def random_textype():
     return np.random.randint(TEX_VORONOI + 1)
+
+class TransparentTexture(SceneNode):
+    def __init__(self, scale, children):
+        self.children = children
+        image = np.zeros((256, 256))
+        low, high = 255.0 * scale[0], 255.0 * scale[1]
+        _scale_to_inplace(image, low, high)
+        self.tex = _np2tex(image)
+
+    def build(self, batch, parent):
+        self.pyg_grp =_PygAlphaBlending(parent=parent)
+        self._build_children(batch)
+        return self.pyg_grp
+
 
 class ProceduralTexture(SceneNode):
     def __init__(self, style, scale, children):
@@ -374,6 +389,9 @@ class ProceduralTexture(SceneNode):
                 dist2 = (x - p[0])**2 + (y - p[1])**2
                 a = np.minimum(a, dist2)
             image = np.sqrt(a)
+        elif style == TEX_TRANSP:
+            image = np.ones((256, 256))
+            self.mag_filter = GL_NEAREST
         else:
             raise KeyError("style does not exist")
 
