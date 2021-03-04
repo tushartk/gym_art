@@ -298,6 +298,7 @@ class BackToFront(SceneNode):
             c.build(batch, ordering)
         return self.pyg_grp
 
+
 class Color(SceneNode):
     def __init__(self, color, children):
         self.color = color
@@ -316,6 +317,11 @@ class Color(SceneNode):
 
 def transform_and_color(transform, color, children):
     return Transform(transform, Color(color, children))
+
+
+def transform_and_texture(transform, style, scale, children):
+    return Transform(transform, ProceduralTexture(style, scale, children))
+
 
 TEX_CHECKER = 0
 TEX_XOR = 1
@@ -673,6 +679,68 @@ def arrow(radius, height, sections):
 # sphere centered on origin, n tris will be about TODO * facets
 def sphere(radius, facets):
     v, n = sphere_strip(radius, facets)
+    collider = SphereCollision(radius)
+    return TriStrip(v, n, collider=collider)
+
+def sphere_strip_ff(radius, resolution):
+    t = np.linspace(-1, 1, resolution)
+    u, v = np.meshgrid(t, t)
+    vtx = []
+    panel = np.zeros((resolution, resolution, 3))
+    inds = list(range(3))
+    for i in range(3):
+        panel[:,:,inds[0]] = u
+        panel[:,:,inds[1]] = v
+        panel[:,:,inds[2]] = 1
+        norms = np.linalg.norm(panel, axis=2)
+        panel = panel / norms[:,:,None]
+        for _ in range(2):
+            for j in range(resolution - 10):
+                strip = deepcopy(panel[[j,j+1],:,:].transpose([1,0,2]).reshape((-1,3)))
+                degen0 = deepcopy(strip[0,:])
+                degen1 = deepcopy(strip[-1,:])
+                vtx.extend([degen0, strip, degen1])
+            panel *= -1
+            panel = np.flip(panel, axis=1)
+        inds = [inds[-1]] + inds[:-1]
+
+    n = np.vstack(vtx)
+    v = radius * n
+    return v, n
+
+def sphere_strip_sf(radius, resolution):
+    t = np.linspace(-1, 1, resolution)
+    u, v = np.meshgrid(t, t)
+    vtx = []
+    panel = np.zeros((resolution, resolution, 3))
+    inds = list(range(3))
+    for i in range(3):
+        panel[:,:,inds[0]] = u
+        panel[:,:,inds[1]] = v
+        panel[:,:,inds[2]] = 1
+        norms = np.linalg.norm(panel, axis=2)
+        panel = panel / norms[:,:,None]
+        for _ in range(2):
+            for j in range(resolution - 10, resolution - 1):
+                strip = deepcopy(panel[[j,j+1],:,:].transpose([1,0,2]).reshape((-1,3)))
+                degen0 = deepcopy(strip[0,:])
+                degen1 = deepcopy(strip[-1,:])
+                vtx.extend([degen0, strip, degen1])
+            panel *= -1
+            panel = np.flip(panel, axis=1)
+        inds = [inds[-1]] + inds[:-1]
+
+    n = np.vstack(vtx)
+    v = radius * n
+    return v, n
+
+def sphere_ball_ff(radius, facets):
+    v, n = sphere_strip_ff(radius, facets)
+    collider = SphereCollision(radius)
+    return TriStrip(v, n, collider=collider)
+
+def sphere_ball_sf(radius, facets):
+    v, n = sphere_strip_sf(radius, facets)
     collider = SphereCollision(radius)
     return TriStrip(v, n, collider=collider)
 

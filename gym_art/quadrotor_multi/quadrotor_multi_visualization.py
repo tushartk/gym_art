@@ -95,8 +95,9 @@ class Quadrotor3DSceneMulti:
         self.vector_array = [[] for _ in range(num_agents)]
         self.viz_trace_nth_step = viz_trace_nth_step
         self.store_path_count = 0
-        self.path_length = 30
         self.path_store = [[] for _ in range(num_agents)]
+        self.obst_viz_traces = 1
+        self.obst_viz_trace_nth_step = 1
 
     def update_goal_diameter(self):
         if self.quad_arm is not None:
@@ -122,13 +123,15 @@ class Quadrotor3DSceneMulti:
         self.quad_transforms, self.shadow_transforms, self.goal_transforms, self.collision_transforms = [], [], [], []
         self.obstacle_transforms, self.vec_cyl_transforms, self.vec_cone_transforms = [], [], []
         self.path_transforms = [[] for _ in range(self.num_agents)]
+        if self.multi_obstacles:
+            self.obst_path_transforms = [[] for _ in range(len(self.multi_obstacles.obstacles))]
 
         shadow_circle = r3d.circle(0.75 * self.diameter, 32)
         collision_sphere = r3d.sphere(0.75 * self.diameter, 32)
 
         arrow_cylinder = r3d.cylinder(0.005, 0.12, 16)
         arrow_cone = r3d.cone(0.01, 0.04, 16)
-        path_sphere = r3d.sphere(0.10 * self.diameter, 16)
+        path_sphere = r3d.sphere(0.1 * self.diameter, 16)
 
         for i, model in enumerate(self.models):
             if model is not None:
@@ -152,9 +155,10 @@ class Quadrotor3DSceneMulti:
                 )
 
             if self.viz_traces:
-                color = quad_color[i % len(quad_color)] + (0.2,)
+                color = quad_color[i % len(quad_color)] + (1.0,)
                 for j in range(self.viz_traces):
                     self.path_transforms[i].append(r3d.transform_and_color(np.eye(4), color, path_sphere))
+
                 # self.path_transforms[i].append(quad_transform)
 
         # TODO make floor size or walls to indicate world_box
@@ -167,7 +171,8 @@ class Quadrotor3DSceneMulti:
 
         self.create_goals()
 
-        bodies = [r3d.BackToFront([floor, st]) for st in self.shadow_transforms]
+        bodies = [r3d.BackToFront([floor])]
+        # bodies = [r3d.BackToFront([floor, st]) for st in self.shadow_transforms]
         # bodies = []
         bodies.extend(self.goal_transforms)
         bodies.extend(self.quad_transforms)
@@ -177,17 +182,20 @@ class Quadrotor3DSceneMulti:
             bodies.extend(path)
         # visualize walls of the room if True
         if self.walls_visible:
-            room = r3d.ProceduralTexture(r3d.random_textype(), (0.15, 0.25), r3d.envBox(*self.room_dims))
+            room = r3d.ProceduralTexture(5, (0.15, 0.25), r3d.envBox(*self.room_dims))
             bodies.append(room)
 
         if self.obstacle_mode != 'no_obstacles':
+            self.obst_path_store = [[] for _ in range(len(self.multi_obstacles.obstacles))]
             self.create_obstacles()
             bodies.extend(self.obstacle_transforms)
+            for obs_path in self.obst_path_transforms:
+                bodies.extend(obs_path)
 
         world = r3d.World(bodies)
         batch = r3d.Batch()
         world.build(batch)
-        self.scene = r3d.Scene(batches=[batch], bgcolor=(1, 1, 1))
+        self.scene = r3d.Scene(batches=[batch], bgcolor=(.1,.1,.1))
         self.scene.initialize()
 
         # Collision spheres have to be added in the ending after everything has been rendered, as it transparent
@@ -200,32 +208,53 @@ class Quadrotor3DSceneMulti:
 
     def create_obstacles(self):
         import gym_art.quadrotor_multi.rendering3d as r3d
-
-        for item in self.multi_obstacles.obstacles:
-            color = quad_color[14]
+        for i, item in enumerate(self.multi_obstacles.obstacles):
+            color = quad_color[2]
             if item.shape == 'cube':
                 obstacle_transform = r3d.transform_and_color(np.eye(4), color, r3d.box(item.size, item.size, item.size))
             elif item.shape == 'sphere':
-                obstacle_transform = r3d.transform_and_color(np.eye(4), color, r3d.sphere(item.size / 2, 18))
+                obstacle_transform = r3d.transform_and_color(np.eye(4), color, r3d.sphere_ball_ff(item.size / 3, 18))
+                # obstacle_transform = r3d.transform_and_texture(np.eye(4), 2, (0.1, 0.2), r3d.sphere_ball_ff(item.size / 3, 18))
             else:
                 raise NotImplementedError()
 
             self.obstacle_transforms.append(obstacle_transform)
+            if self.obst_viz_traces:
+                color = color + (0.9, )
+                for k in range(self.obst_viz_traces):
+                    self.obst_path_transforms[i].append(r3d.transform_and_color(np.eye(4), color, r3d.sphere_ball_sf(item.size / 3, 18)))
 
     def update_obstacles(self, multi_obstacles):
         import gym_art.quadrotor_multi.rendering3d as r3d
 
         for i, g in enumerate(multi_obstacles.obstacles):
-            self.obstacle_transforms[i].set_transform(r3d.translate(g.pos))
+            translation = r3d.translate(g.pos)
+            self.obstacle_transforms[i].set_transform(translation)
+
+            if self.obst_viz_traces and self.store_path_count % self.obst_viz_trace_nth_step == 0:
+                if len(self.obst_path_store[i]) >= self.obst_viz_traces:
+                    self.obst_path_store[i].pop(0)
+
+                self.obst_path_store[i].append(translation)
+                color = quad_color[4]
+                # color = quad_color[np.random.randint(0, 13, 1)[0]]
+                # print(color)
+                path_storage_length = len(self.obst_path_store[i])
+                for k in range(path_storage_length):
+                    # color_wa = color + (k / path_storage_length + 0.3,)
+                    color_wa = color + (0.9, )
+                    # scale = k / path_storage_length + 0.01
+                    # transformation = self.obst_path_store[i][k] @ r3d.scale(scale)
+                    self.obst_path_transforms[i][k].set_transform_and_color(translation, color_wa)
 
     def create_goals(self):
         import gym_art.quadrotor_multi.rendering3d as r3d
 
-        goal_sphere = r3d.sphere(self.goal_diameter / 4, 18)
+        goal_sphere = r3d.sphere(self.goal_diameter / 3, 18)
         for i in range(len(self.models)):
-            # color = quad_color[i % len(quad_color)]
+            color = quad_color[i % len(quad_color)]
             # color = (0.0, 0.5, 0.5)
-            color = (1.0, 1.0, 1.0)
+            # color = (1.0, 1.0, 1.0)
             goal_transform = r3d.transform_and_color(np.eye(4), color + (0.9, ), goal_sphere)
             self.goal_transforms.append(goal_transform)
 
@@ -233,9 +262,9 @@ class Quadrotor3DSceneMulti:
         import gym_art.quadrotor_multi.rendering3d as r3d
 
         for i, g in enumerate(goals):
-            # color = quad_color[i % len(quad_color)]
+            color = quad_color[i % len(quad_color)]
             # color = (0.0, 0.5, 0.5)
-            color = (1.0, 1.0, 1.0)
+            # color = (1.0, 1.0, 1.0)
             self.goal_transforms[i].set_transform_and_color(r3d.translate(g[0:3]), color + (0.9, ))
 
     def update_models(self, models):
@@ -255,6 +284,8 @@ class Quadrotor3DSceneMulti:
         self.dynamics = dynamics
         self.vector_array = [[] for _ in range(self.num_agents)]
         self.path_store = [[] for _ in range(self.num_agents)]
+        if self.multi_obstacles:
+            self.obst_path_store = [[] for _ in range(len(self.multi_obstacles.obstacles))]
 
         if self.viewpoint == 'global':
             goal = np.mean(goals, axis=0)
@@ -298,10 +329,11 @@ class Quadrotor3DSceneMulti:
                         self.path_store[i].pop(0)
 
                     self.path_store[i].append(translation)
-                    color_rgba = quad_color[i % len(quad_color)] + (1.0,)
+                    color_rgba = quad_color[i % len(quad_color)] + (0.9, )
                     path_storage_length = len(self.path_store[i])
-                    for k in range(path_storage_length-2):
+                    for k in range(path_storage_length):
                         scale = k/path_storage_length + 0.01
+                        # color_rgb = color_rgba + (k/path_storage_length, )
                         transformation = self.path_store[i][k] @ r3d.scale(scale)
                         self.path_transforms[i][k].set_transform_and_color(transformation, color_rgba)
 
